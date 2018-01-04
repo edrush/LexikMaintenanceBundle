@@ -130,7 +130,7 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
                         // overwrite existing schedule
                         $this->pdoDriver->deleteStartdateQuery($db);
                     }
-
+                    
                     $status = $this->pdoDriver->insertStartdateQuery($ttl, $startDate, $db);
                 } catch (\Exception $e) {
                     $status = false;
@@ -154,7 +154,7 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
             // overwrite existing schedule
             return false;
         }
-
+        
         return $this->pdoDriver->deleteStartdateQuery($db);
     }
 
@@ -165,16 +165,14 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
     {
         $db = $this->pdoDriver->initDb();
         $data = $this->pdoDriver->selectQuery($db);
-
+        
         if (empty($data)) {
             return false;
         }
 
-        $ttlData = array_key_exists('ttl', $data[0]) === true ? $data[0]['ttl'] :
-            (array_key_exists('TTL', $data[0]) === true ? $data[0]['TTL'] : null);
-        if (null !== $ttlData) {
+        if (null !== $data[0]['ttl']) {
             $now = new \DateTime('now');
-            $ttl = new \DateTime($ttlData);
+            $ttl = new \DateTime($data[0]['ttl']);
 
             if ($ttl < $now) {
                 return $this->createUnlock();
@@ -191,25 +189,16 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
     {
         $db = $this->pdoDriver->initDb();
         $data = $this->pdoDriver->selectStartdateQuery($db);
-
-        if (empty($data)) {
-            return false;
+        
+        if (!empty($data)) {
+            //quick fix: set data
+            $this->options['startdate'] = $data[0]['startdate'];
+            $this->options['ttl'] = $data[0]['ttl'];
+            
+            return true;
         }
 
-        $ttlData = array_key_exists('ttl', $data[0]) === true ? $data[0]['ttl'] :
-                (array_key_exists('TTL', $data[0]) === true ? $data[0]['TTL'] : null);
-        $startDateData = array_key_exists('startdate', $data[0]) === true ? $data[0]['startdate'] :
-                (array_key_exists('STARTDATE', $data[0]) === true ? $data[0]['STARTDATE'] : null);
-
-        if ($ttlData === null || $startDateData === null) {
-            return false;
-        }
-
-        //quick fix: set data
-        $this->options['startdate'] = $startDateData;
-        $this->options['ttl'] = $ttlData;
-
-        return true;
+        return false;
     }
 
     /**
@@ -226,23 +215,17 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
 
             if (empty($data)) {
                 $status = false;
-            } else {
-                $ttlData = array_key_exists('ttl', $data[0]) === true ? $data[0]['ttl'] :
-                        (array_key_exists('TTL', $data[0]) === true ? $data[0]['TTL'] : null);
-                $startDateData = array_key_exists('startdate', $data[0]) === true ? $data[0]['startdate'] :
-                        (array_key_exists('STARTDATE', $data[0]) === true ? $data[0]['STARTDATE'] : null);
+            } elseif (null !== $data[0]['startdate']) {
+                $now = new \DateTime('now');
+                $ttl = $data[0]['ttl'] ? $data[0]['ttl'] : 0;
+                $startDate = new \DateTime($data[0]['startdate']);
 
-                if (null !== $startDateData) {
-                    $now = new \DateTime('now');
-                    $ttl = $ttlData ? $ttlData : 0;
-                    $startDate = new \DateTime($startDateData);
+                if ($startDate < $now) {
+                    
+                    $this->options['ttl'] = $ttl;
+                    $this->lock();
 
-                    if ($startDate < $now) {
-                        $this->options['ttl'] = $ttl;
-                        $this->lock();
-
-                        $status = true;
-                    }
+                    $status = true;
                 }
             }
         }
@@ -297,7 +280,7 @@ class DatabaseDriver extends AbstractDriver implements DriverTtlInterface, Drive
 
         return $this->translator->trans($key, array(), 'maintenance');
     }
-
+    
     /**
      * {@inheritdoc}
      */
